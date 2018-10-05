@@ -1,0 +1,39 @@
+language: node_js
+
+cache:
+  directories:
+    - sysconfcpus
+    - node_modules
+
+git:
+  depth: 150
+
+env:
+  matrix:
+    - ELM_VERSION=0.19 TARGET_NODE_VERSION=node
+
+branches:
+  only:
+    - master
+
+before_install:
+  - | # epic build time improvement - see https://github.com/elm-lang/elm-compiler/issues/1473#issuecomment-245704142
+    if [ ! -d sysconfcpus/bin ];
+    then
+      git clone https://github.com/obmarg/libsysconfcpus.git;
+      cd libsysconfcpus;
+      ./configure --prefix=$TRAVIS_BUILD_DIR/sysconfcpus;
+      make && make install;
+      cd ..;
+      rm -rf libsysconfcpus;
+    fi
+
+install:
+  - nvm install $TARGET_NODE_VERSION
+  - nvm use $TARGET_NODE_VERSION
+  - node --version
+  - nvm --version
+  - npm install -g elm@$ELM_VERSION
+
+script:
+  - ./gh-pages.sh
