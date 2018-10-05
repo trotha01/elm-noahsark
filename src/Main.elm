@@ -9,6 +9,7 @@ import Html.Events exposing (..)
 import Json.Decode as Decode
 import Math.Vector2 as Vec2 exposing (..)
 import Task
+import Time
 
 
 main =
@@ -27,6 +28,7 @@ main =
 type alias Model =
     { waterLevel : Float
     , ark : Ark
+    , rainPosition : Int
     , viewport : Viewport
     , pause : Bool
     }
@@ -47,6 +49,7 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( { waterLevel = 0
       , ark = initArk ( 0, 0 )
+      , rainPosition = 0
       , viewport = initViewport
       , pause = True
       }
@@ -93,12 +96,16 @@ type Msg
     = Tick Float
     | KeyPress Direction
     | TogglePause
+    | UpdateRain Time.Posix
     | UpdateViewport Viewport
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        UpdateRain delta ->
+            ( model |> updateRain, Cmd.none )
+
         Tick delta ->
             ( model
                 |> mapArk (arkUpdate delta)
@@ -125,12 +132,17 @@ update msg model =
             in
             ( { model
                 -- We add buffer space to waterLevel and ark prevent scrollbar
-                | waterLevel = halfHeight - 25
+                | waterLevel = halfHeight
                 , ark = initArk ( halfWidth, halfHeight - 25 )
                 , viewport = viewport
               }
             , Cmd.none
             )
+
+
+updateRain : Model -> Model
+updateRain model =
+    { model | rainPosition = modBy 5000 (model.rainPosition + 100) }
 
 
 gravity : Vec2
@@ -221,10 +233,47 @@ view : Model -> Document Msg
 view model =
     { title = title
     , body =
-        [ viewWater model
+        [ viewBackground model
+        , viewWater model
         , viewArk model
+        , viewRain model
         ]
     }
+
+
+viewBackground : Model -> Html Msg
+viewBackground model =
+    div
+        [ style "background-color" "black"
+        , style "position" "absolute"
+        , style "width" (px model.viewport.viewport.width)
+        , style "height" (px model.viewport.viewport.height)
+        ]
+        []
+
+
+viewRain : Model -> Html Msg
+viewRain model =
+    let
+        background =
+            if model.rainPosition == 100 || model.rainPosition == 800 then
+                style "background-color" "rgba(255, 255, 255, 0.9)"
+            else
+                style "background" "url(imgs/rain.png)"
+    in
+    div
+        [ style "height" "100%"
+        , background
+        , style "background-position"
+            (px (toFloat model.rainPosition)
+                ++ " "
+                ++ px (toFloat model.rainPosition)
+            )
+        , style "position" "absolute"
+        , style "width" (px model.viewport.viewport.width)
+        , style "height" (px model.viewport.viewport.height)
+        ]
+        []
 
 
 viewWater : Model -> Html Msg
@@ -293,4 +342,5 @@ subscriptions model =
         Sub.batch
             [ onAnimationFrameDelta (\delta -> Tick (delta / 1000)) -- convert to seconds
             , onKeyDown keyDecoder
+            , Time.every 100 UpdateRain
             ]
