@@ -124,15 +124,15 @@ update msg model =
         UpdateViewport viewport ->
             let
                 halfHeight =
-                    viewport.viewport.height / 2
+                    viewport.scene.height / 2
 
                 halfWidth =
-                    viewport.viewport.width / 2
+                    viewport.scene.width / 2
             in
             ( { model
                 -- We add buffer space to waterLevel and ark prevent scrollbar
                 | waterLevel = halfHeight
-                , ark = initArk ( halfWidth, halfHeight - 25 )
+                , ark = initArk ( halfWidth, halfHeight )
                 , viewport = viewport
               }
             , Cmd.none
@@ -181,7 +181,7 @@ applyTerminalVelocity vec2 =
             getY vec2
 
         newY =
-            clamp -200 200 y
+            clamp -600 600 y
     in
     setY newY vec2
 
@@ -229,14 +229,14 @@ arkMove waterLevel direction ark =
             if getY ark.position < waterLevel then
                 ark
             else
-                { ark | velocity = Vec2.add (vec2 0 -100) ark.velocity }
+                { ark | velocity = Vec2.add (vec2 0 -50) ark.velocity }
 
         Down ->
             -- only allow down key when ark is above water
             if getY ark.position > waterLevel then
                 ark
             else
-                { ark | velocity = Vec2.add (vec2 0 100) ark.velocity }
+                { ark | velocity = Vec2.add (vec2 0 50) ark.velocity }
 
 
 
@@ -298,11 +298,25 @@ viewRain model =
 
 viewWater : Model -> Html Msg
 viewWater model =
+    let
+        halfHeight =
+            model.viewport.viewport.height / 2
+
+        top =
+            clamp 0
+                model.viewport.scene.height
+                ((2 * halfHeight) - getY model.ark.position)
+
+        height =
+            clamp 0
+                model.viewport.scene.height
+                (model.viewport.viewport.height - top)
+    in
     div
         [ style "position" "absolute"
-        , style "top" (px (model.viewport.viewport.height / 2))
-        , style "width" "98%"
-        , style "height" (px model.waterLevel)
+        , style "top" (px top)
+        , style "width" "100%"
+        , style "height" (px height)
         , style "background-color" "lightblue"
         ]
         [ text "water" ]
@@ -318,10 +332,13 @@ viewArk model =
     let
         arkTilt =
             atan2 (getY model.ark.velocity) 300
+
+        centerScreen =
+            model.viewport.scene.height / 2
     in
     div
         [ style "position" "absolute"
-        , style "top" (px (getY model.ark.position))
+        , style "top" (px centerScreen)
         , style "left" (px (getX model.ark.position))
         , style "width" "100px"
         , style "height" "40px"
