@@ -233,12 +233,18 @@ view : Model -> Document Msg
 view model =
     { title = title
     , body =
-        [ viewBackground model
+        [ injectStyle
+        , viewBackground model
         , viewWater model
         , viewArk model
         , viewRain model
         ]
     }
+
+
+injectStyle : Html Msg
+injectStyle =
+    node "style" [] [ text "body { padding: 0; margin: 0; overflow: hidden }" ]
 
 
 viewBackground : Model -> Html Msg
