@@ -31,6 +31,7 @@ type alias Model =
     , rainPosition : Int
     , viewport : Viewport
     , pause : Bool
+    , timeElapsed : Float
     }
 
 
@@ -52,6 +53,7 @@ init flags =
       , rainPosition = 0
       , viewport = initViewport
       , pause = True
+      , timeElapsed = 0
       }
     , Task.perform UpdateViewport getViewport
     )
@@ -108,6 +110,7 @@ update msg model =
 
         Tick delta ->
             ( model
+                |> updateTimeElapsed delta
                 |> mapArk (arkUpdate model.waterLevel delta)
                 |> mapArk (arkApplyWorld model.waterLevel)
             , Cmd.none
@@ -137,6 +140,11 @@ update msg model =
               }
             , Cmd.none
             )
+
+
+updateTimeElapsed : Float -> Model -> Model
+updateTimeElapsed delta model =
+    { model | timeElapsed = model.timeElapsed + delta }
 
 
 updateRain : Model -> Model
@@ -261,10 +269,30 @@ injectStyle =
     node "style" [] [ text "body { padding: 0; margin: 0; overflow: hidden }" ]
 
 
+light : Float -> Float
+light timeElapsed =
+    (sin <| abs (timeElapsed / 10)) * 100
+
+
 viewBackground : Model -> Html Msg
 viewBackground model =
+    let
+        brightness =
+            light model.timeElapsed
+
+        topGradient =
+            -- blue
+            "hsla(244, 30%, " ++ String.fromFloat brightness ++ "%, 1)"
+
+        bottomGradient =
+            -- red
+            "hsla(0, 30%, " ++ String.fromFloat brightness ++ "%, 1)"
+
+        gradients =
+            topGradient ++ ", " ++ bottomGradient
+    in
     div
-        [ style "background-color" "black"
+        [ style "background-image" ("linear-gradient(" ++ gradients ++ ")")
         , style "position" "absolute"
         , style "width" (px model.viewport.viewport.width)
         , style "height" (px model.viewport.viewport.height)
@@ -275,23 +303,33 @@ viewBackground model =
 viewRain : Model -> Html Msg
 viewRain model =
     let
+        isDaytime =
+            light model.timeElapsed > 70
+
         background =
-            if model.rainPosition == 100 || model.rainPosition == 800 then
+            if isDaytime then
+                style "" ""
+            else if model.rainPosition == 100 || model.rainPosition == 800 then
                 style "background-color" "rgba(255, 255, 255, 0.9)"
             else
                 style "background" "url(imgs/rain.png)"
+
+        height =
+            clamp 0
+                model.viewport.scene.height
+                (model.viewport.scene.height - getY model.ark.position)
     in
     div
-        [ style "height" "100%"
-        , background
+        [ background
         , style "background-position"
             (px (toFloat model.rainPosition)
                 ++ " "
                 ++ px (toFloat model.rainPosition)
             )
         , style "position" "absolute"
+        , style "top" "0px"
         , style "width" (px model.viewport.viewport.width)
-        , style "height" (px model.viewport.viewport.height)
+        , style "height" (px height)
         ]
         []
 
@@ -312,7 +350,7 @@ viewWater model =
                 model.viewport.scene.height
                 (model.viewport.viewport.height - top)
 
-        light =
+        brightness =
             79 - (halfHeight + getY model.ark.position) / 40
     in
     div
@@ -320,7 +358,7 @@ viewWater model =
         , style "top" (px top)
         , style "width" "100%"
         , style "height" (px height)
-        , style "background-color" ("hsla(195, 53%, " ++ String.fromFloat light ++ "% , 0.8)")
+        , style "background-color" ("hsla(195, 53%, " ++ String.fromFloat brightness ++ "% , 0.8)")
         ]
         [ text "water" ]
 
