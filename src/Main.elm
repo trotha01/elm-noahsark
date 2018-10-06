@@ -114,10 +114,9 @@ update msg model =
             )
 
         KeyPress dir ->
-            ( model
+            model
                 |> mapArk (arkMove model.waterLevel dir)
-            , Cmd.none
-            )
+                |> update (Tick 0)
 
         TogglePause ->
             ( { model | pause = not model.pause }, Cmd.none )
@@ -316,6 +315,10 @@ px x =
 
 viewArk : Model -> Html Msg
 viewArk model =
+    let
+        arkTilt =
+            atan2 (getY model.ark.velocity) 300
+    in
     div
         [ style "position" "absolute"
         , style "top" (px (getY model.ark.position))
@@ -324,8 +327,14 @@ viewArk model =
         , style "height" "40px"
         , style "background-color" "saddlebrown"
         , style "text-align" "center"
+        , style "transform" ("rotate(" ++ radFromFloat arkTilt ++ ")")
         ]
         [ text "ark" ]
+
+
+radFromFloat : Float -> String
+radFromFloat r =
+    String.fromFloat r ++ "rad"
 
 
 title : String
