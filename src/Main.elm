@@ -108,7 +108,7 @@ update msg model =
 
         Tick delta ->
             ( model
-                |> mapArk (arkUpdate delta)
+                |> mapArk (arkUpdate model.waterLevel delta)
                 |> mapArk (arkApplyWorld model.waterLevel)
             , Cmd.none
             )
@@ -187,14 +187,29 @@ applyTerminalVelocity vec2 =
     setY newY vec2
 
 
-arkUpdate : Float -> Ark -> Ark
-arkUpdate delta ark =
-    { ark
-        | position = displacement delta ark.position ark.velocity ark.acceleration
-        , velocity =
+arkUpdate : Float -> Float -> Ark -> Ark
+arkUpdate waterLevel delta ark =
+    let
+        newPosition =
+            displacement delta ark.position ark.velocity ark.acceleration
+
+        newVelocity =
             Vec2.add ark.velocity (Vec2.scale delta ark.acceleration)
                 |> applyTerminalVelocity
+                |> applySplash waterLevel ark.position newPosition
+    in
+    { ark
+        | position = newPosition
+        , velocity = newVelocity
     }
+
+
+applySplash : Float -> Vec2 -> Vec2 -> Vec2 -> Vec2
+applySplash waterLevel oldPosition newPosition velocity =
+    if getY oldPosition < waterLevel && getY newPosition > waterLevel then
+        Vec2.sub velocity (vec2 0 50)
+    else
+        velocity
 
 
 displacement : Float -> Vec2 -> Vec2 -> Vec2 -> Vec2
