@@ -311,13 +311,16 @@ viewWater model =
             clamp 0
                 model.viewport.scene.height
                 (model.viewport.viewport.height - top)
+
+        light =
+            79 - (halfHeight + getY model.ark.position) / 40
     in
     div
         [ style "position" "absolute"
         , style "top" (px top)
         , style "width" "100%"
         , style "height" (px height)
-        , style "background-color" "lightblue"
+        , style "background-color" ("hsla(195, 53%, " ++ String.fromFloat light ++ "% , 0.8)")
         ]
         [ text "water" ]
 
