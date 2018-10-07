@@ -8,6 +8,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Json.Decode as Decode
 import Math.Vector2 as Vec2 exposing (..)
+import Random as Rand exposing (..)
 import Task
 import Time
 
@@ -28,10 +29,13 @@ main =
 type alias Model =
     { waterLevel : Float
     , ark : Ark
+    , fish : List Fish
+    , birds : List Bird
     , rainPosition : Int
     , viewport : Viewport
     , pause : Bool
     , timeElapsed : Float
+    , seed : Rand.Seed
     }
 
 
@@ -39,6 +43,23 @@ type alias Ark =
     { position : Vec2
     , velocity : Vec2
     , acceleration : Vec2
+    , radius : Float
+    }
+
+
+type alias Fish =
+    { id : Float
+    , position : Vec2
+    , velocity : Vec2
+    , radius : Float
+    }
+
+
+type alias Bird =
+    { id : Float
+    , position : Vec2
+    , velocity : Vec2
+    , radius : Float
     }
 
 
@@ -50,10 +71,13 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( { waterLevel = 0
       , ark = initArk ( 0, 0 )
+      , fish = []
+      , birds = []
       , rainPosition = 0
       , viewport = initViewport
       , pause = True
       , timeElapsed = 0
+      , seed = Rand.initialSeed 0
       }
     , Task.perform UpdateViewport getViewport
     )
@@ -64,6 +88,25 @@ initArk ( x, y ) =
     { position = vec2 x y
     , velocity = vec2 0 0
     , acceleration = vec2 0 0
+    , radius = 50
+    }
+
+
+initFish : Float -> ( Float, Float ) -> Fish
+initFish id ( x, y ) =
+    { id = id
+    , position = vec2 x y
+    , velocity = vec2 -50 0
+    , radius = 20
+    }
+
+
+initBird : Float -> ( Float, Float ) -> Bird
+initBird id ( x, y ) =
+    { id = id
+    , position = vec2 x y
+    , velocity = vec2 -50 0
+    , radius = 20
     }
 
 
@@ -112,7 +155,13 @@ update msg model =
             ( model
                 |> updateTimeElapsed delta
                 |> mapArk (arkUpdate model.waterLevel delta)
+                |> mapBirds (birdsUpdate delta)
+                |> mapFish (fishUpdate delta)
                 |> mapArk (arkApplyWorld model.waterLevel)
+                |> addBirds model.viewport delta
+                |> addFish model.viewport delta
+                |> checkCollisions
+                |> removeOldAnimals
             , Cmd.none
             )
 
@@ -164,6 +213,16 @@ mapArk f model =
     { model | ark = f model.ark }
 
 
+mapBirds : (List Bird -> List Bird) -> Model -> Model
+mapBirds f model =
+    { model | birds = f model.birds }
+
+
+mapFish : (List Fish -> List Fish) -> Model -> Model
+mapFish f model =
+    { model | fish = f model.fish }
+
+
 arkApplyWorld : Float -> Ark -> Ark
 arkApplyWorld waterLevel ark =
     if getY ark.position > waterLevel then
@@ -211,6 +270,40 @@ arkUpdate waterLevel delta ark =
     }
 
 
+birdsUpdate : Float -> List Bird -> List Bird
+birdsUpdate delta birds =
+    let
+        newPosition bird =
+            { bird | position = displacement delta bird.position bird.velocity (vec2 0 0) }
+    in
+    List.map newPosition birds
+
+
+fishUpdate : Float -> List Fish -> List Fish
+fishUpdate delta fishList =
+    let
+        newPosition fish =
+            { fish | position = displacement delta fish.position fish.velocity (vec2 0 0) }
+    in
+    List.map newPosition fishList
+
+
+removeOldAnimals : Model -> Model
+removeOldAnimals model =
+    { model
+        | fish = List.filter isOffscreen model.fish
+        , birds = List.filter isOffscreen model.birds
+    }
+
+
+isOffscreen : Positioned a -> Bool
+isOffscreen item =
+    (getX item.position < 50)
+        || (getX item.position > 50)
+        || (getY item.position > 100)
+        || (getY item.position < 100)
+
+
 applySplash : Float -> Vec2 -> Vec2 -> Vec2 -> Vec2
 applySplash waterLevel oldPosition newPosition velocity =
     if getY oldPosition < waterLevel && getY newPosition > waterLevel then
@@ -247,6 +340,71 @@ arkMove waterLevel direction ark =
                 { ark | velocity = Vec2.add (vec2 0 50) ark.velocity }
 
 
+realignFish : Model -> Fish -> Fish
+realignFish model fish =
+    { fish | position = setY (fishTop model fish) fish.position }
+
+
+realignBird : Model -> Bird -> Bird
+realignBird model bird =
+    { bird | position = setY (birdTop model bird) bird.position }
+
+
+realignArk : Model -> Ark -> Ark
+realignArk model ark =
+    { ark | position = setY (model.viewport.scene.height / 2) ark.position }
+
+
+checkCollisions : Model -> Model
+checkCollisions model =
+    let
+        ( newArk, newFishList ) =
+            List.foldl
+                (\fish ( ark, uneaten ) ->
+                    if circlesCollide (realignArk model ark) (realignFish model fish) then
+                        ( ark, uneaten )
+                    else
+                        ( ark, fish :: uneaten )
+                )
+                ( model.ark, [] )
+                model.fish
+
+        ( newArk2, newBirdList ) =
+            List.foldl
+                (\bird ( ark, uneaten ) ->
+                    if circlesCollide (realignArk model ark) (realignBird model bird) then
+                        ( ark, uneaten )
+                    else
+                        ( ark, bird :: uneaten )
+                )
+                ( newArk, [] )
+                model.birds
+    in
+    { model | ark = newArk2, fish = newFishList, birds = newBirdList }
+
+
+type alias Positioned a =
+    { a | position : Vec2 }
+
+
+type alias Circle a =
+    Positioned { a | radius : Float }
+
+
+{-| circlesCollide checks if two circles overlap
+-}
+circlesCollide : Circle a -> Circle b -> Bool
+circlesCollide c1 c2 =
+    let
+        distSq =
+            Vec2.distanceSquared c1.position c2.position
+
+        radSq =
+            (c1.radius + c2.radius) ^ 2
+    in
+    distSq < radSq
+
+
 
 -- VIEW
 
@@ -260,6 +418,8 @@ view model =
         , viewWater model
         , viewArk model
         , viewRain model
+        , viewBirds model
+        , viewFish model
         ]
     }
 
@@ -334,6 +494,63 @@ viewRain model =
         []
 
 
+fishTop : Model -> Fish -> Float
+fishTop model fish =
+    let
+        waterLevel =
+            model.viewport.viewport.height - getY model.ark.position
+    in
+    getY fish.position + waterLevel
+
+
+viewFish : Model -> Html Msg
+viewFish model =
+    div []
+        (List.map
+            (\fish ->
+                div
+                    [ style "position" "absolute"
+                    , style "top" (px <| fishTop model fish)
+                    , style "left" (px <| getX fish.position)
+                    ]
+                    [ text "fish" ]
+            )
+            model.fish
+        )
+
+
+birdTop : Model -> Bird -> Float
+birdTop model bird =
+    let
+        waterLevel =
+            model.viewport.viewport.height - getY model.ark.position
+    in
+    getY bird.position - (model.viewport.scene.height - waterLevel)
+
+
+viewBirds : Model -> Html Msg
+viewBirds model =
+    div []
+        (List.map
+            (\bird ->
+                div
+                    [ style "position" "absolute"
+                    , style "top" (px <| birdTop model bird)
+                    , style "left" (px <| getX bird.position)
+                    ]
+                    [ text "bird" ]
+            )
+            model.birds
+        )
+
+
+waterTop : Model -> Float
+waterTop model =
+    clamp 0
+        model.viewport.scene.height
+        (model.viewport.viewport.height - getY model.ark.position)
+
+
 viewWater : Model -> Html Msg
 viewWater model =
     let
@@ -341,9 +558,7 @@ viewWater model =
             model.viewport.viewport.height / 2
 
         top =
-            clamp 0
-                model.viewport.scene.height
-                ((2 * halfHeight) - getY model.ark.position)
+            waterTop model
 
         height =
             clamp 0
@@ -398,6 +613,60 @@ radFromFloat r =
 title : String
 title =
     "Noah's Ark"
+
+
+addBirds : Viewport -> Float -> Model -> Model
+addBirds viewport delta model =
+    let
+        ( newBirdList, seed ) =
+            case Rand.step (birdGenerator viewport model.timeElapsed) model.seed of
+                ( Nothing, newSeed ) ->
+                    ( model.birds, newSeed )
+
+                ( Just newBird, newSeed ) ->
+                    ( newBird :: model.birds, newSeed )
+    in
+    { model | birds = newBirdList, seed = seed }
+
+
+addFish : Viewport -> Float -> Model -> Model
+addFish viewport delta model =
+    let
+        ( newFishList, seed ) =
+            case Rand.step (fishGenerator viewport model.timeElapsed) model.seed of
+                ( Nothing, newSeed ) ->
+                    ( model.fish, newSeed )
+
+                ( Just newFish, newSeed ) ->
+                    ( newFish :: model.fish, newSeed )
+    in
+    { model | fish = newFishList, seed = seed }
+
+
+birdGenerator : Viewport -> Float -> Generator (Maybe Bird)
+birdGenerator viewport id =
+    Rand.map2
+        (\i y ->
+            if i > 1 then
+                Nothing
+            else
+                Just (initBird id ( viewport.scene.width, y ))
+        )
+        (Rand.int 0 100)
+        (Rand.float 20 (viewport.scene.height - 20))
+
+
+fishGenerator : Viewport -> Float -> Generator (Maybe Fish)
+fishGenerator viewport id =
+    Rand.map2
+        (\i y ->
+            if i > 1 then
+                Nothing
+            else
+                Just (initFish id ( viewport.scene.width + 20, y ))
+        )
+        (Rand.int 0 100)
+        (Rand.float 20 (viewport.scene.height - 20))
 
 
 
