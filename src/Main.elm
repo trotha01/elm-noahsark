@@ -1,4 +1,4 @@
-module Main exposing (..)
+module Main exposing (Ark, Bird, Circle, Direction(..), Fish, Flags, Model, Msg(..), Positioned, addBirds, addFish, applySplash, applyTerminalVelocity, arkApplyGravity, arkApplyWater, arkApplyWorld, arkMove, arkUpdate, birdGenerator, birdTop, birdsUpdate, checkCollisions, circlesCollide, displacement, fishGenerator, fishTop, fishUpdate, gravity, init, initArk, initBird, initFish, initScene, initSubViewport, initViewport, injectStyle, isOffscreen, keyDecoder, light, main, mapArk, mapBirds, mapFish, px, radFromFloat, realignArk, realignBird, realignFish, removeOldAnimals, subscriptions, title, toDirection, update, updateRain, updateTimeElapsed, view, viewArk, viewBackground, viewBirds, viewFish, viewRain, viewWater, waterTop)
 
 import Browser exposing (..)
 import Browser.Dom exposing (..)
@@ -143,11 +143,15 @@ type Msg
     | TogglePause
     | UpdateRain Time.Posix
     | UpdateViewport Viewport
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        NoOp ->
+            ( model, Cmd.none )
+
         UpdateRain delta ->
             ( model |> updateRain, Cmd.none )
 
@@ -227,6 +231,7 @@ arkApplyWorld : Float -> Ark -> Ark
 arkApplyWorld waterLevel ark =
     if getY ark.position > waterLevel then
         arkApplyWater ark
+
     else
         arkApplyGravity ark
 
@@ -307,9 +312,14 @@ isOffscreen item =
 applySplash : Float -> Vec2 -> Vec2 -> Vec2 -> Vec2
 applySplash waterLevel oldPosition newPosition velocity =
     if getY oldPosition < waterLevel && getY newPosition > waterLevel then
-        Vec2.sub velocity (vec2 0 50)
+        Vec2.sub velocity (vec2 0 ((waterLevel - getY oldPosition) * splashScale))
+
     else
         velocity
+
+
+splashScale =
+    50
 
 
 displacement : Float -> Vec2 -> Vec2 -> Vec2 -> Vec2
@@ -329,6 +339,7 @@ arkMove waterLevel direction ark =
             -- only allow up key when ark is underwater
             if getY ark.position < waterLevel then
                 ark
+
             else
                 { ark | velocity = Vec2.add (vec2 0 -50) ark.velocity }
 
@@ -336,6 +347,7 @@ arkMove waterLevel direction ark =
             -- only allow down key when ark is above water
             if getY ark.position > waterLevel then
                 ark
+
             else
                 { ark | velocity = Vec2.add (vec2 0 50) ark.velocity }
 
@@ -363,6 +375,7 @@ checkCollisions model =
                 (\fish ( ark, uneaten ) ->
                     if circlesCollide (realignArk model ark) (realignFish model fish) then
                         ( ark, uneaten )
+
                     else
                         ( ark, fish :: uneaten )
                 )
@@ -374,6 +387,7 @@ checkCollisions model =
                 (\bird ( ark, uneaten ) ->
                     if circlesCollide (realignArk model ark) (realignBird model bird) then
                         ( ark, uneaten )
+
                     else
                         ( ark, bird :: uneaten )
                 )
@@ -469,8 +483,10 @@ viewRain model =
         background =
             if isDaytime then
                 style "" ""
+
             else if model.rainPosition == 100 || model.rainPosition == 800 then
                 style "background-color" "rgba(255, 255, 255, 0.9)"
+
             else
                 style "background" "url(imgs/rain.png)"
 
@@ -513,7 +529,7 @@ viewFish model =
                     , style "top" (px <| fishTop model fish)
                     , style "left" (px <| getX fish.position)
                     ]
-                    [ text "fish" ]
+                    [ img [ src "imgs/fish.png", width 50, height 50 ] [] ]
             )
             model.fish
         )
@@ -538,7 +554,7 @@ viewBirds model =
                     , style "top" (px <| birdTop model bird)
                     , style "left" (px <| getX bird.position)
                     ]
-                    [ text "bird" ]
+                    [ img [ src "imgs/bird.png", width 50, height 50 ] [] ]
             )
             model.birds
         )
@@ -575,7 +591,7 @@ viewWater model =
         , style "height" (px height)
         , style "background-color" ("hsla(195, 53%, " ++ String.fromFloat brightness ++ "% , 0.8)")
         ]
-        [ text "water" ]
+        []
 
 
 px : Float -> String
@@ -602,7 +618,7 @@ viewArk model =
         , style "text-align" "center"
         , style "transform" ("rotate(" ++ radFromFloat arkTilt ++ ")")
         ]
-        [ text "ark" ]
+        []
 
 
 radFromFloat : Float -> String
@@ -649,6 +665,7 @@ birdGenerator viewport id =
         (\i y ->
             if i > 1 then
                 Nothing
+
             else
                 Just (initBird id ( viewport.scene.width, y ))
         )
@@ -662,6 +679,7 @@ fishGenerator viewport id =
         (\i y ->
             if i > 1 then
                 Nothing
+
             else
                 Just (initFish id ( viewport.scene.width + 20, y ))
         )
@@ -687,14 +705,18 @@ toDirection string =
         "ArrowDown" ->
             KeyPress Down
 
-        _ ->
+        " " ->
             TogglePause
+
+        _ ->
+            NoOp
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.pause then
         onKeyDown keyDecoder
+
     else
         Sub.batch
             [ onAnimationFrameDelta (\delta -> Tick (delta / 1000)) -- convert to seconds
