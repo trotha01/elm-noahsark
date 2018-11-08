@@ -146,6 +146,7 @@ type Msg
     | TogglePause
     | UpdateRain Time.Posix
     | UpdateViewport Viewport
+    | WindowResize
     | NoOp
 
 
@@ -154,6 +155,9 @@ update msg model =
     case msg of
         NoOp ->
             ( model, Cmd.none )
+
+        WindowResize ->
+            ( model, Task.perform UpdateViewport getViewport )
 
         UpdateRain delta ->
             ( model |> updateRain, Cmd.none )
@@ -435,6 +439,53 @@ view : Model -> Document Msg
 view model =
     { title = title
     , body =
+        if model.pause then
+            [ viewGamePaused model ]
+
+        else
+            [ viewGamePlaying model ]
+    }
+
+
+viewGamePaused : Model -> Html Msg
+viewGamePaused model =
+    div []
+        [ injectStyle
+        , viewBackground model
+        , viewWater model
+        , viewArk model
+        , viewRain model
+        , viewBirds model
+        , viewFish model
+        , viewPauseScreen model
+        ]
+
+
+viewPauseScreen : Model -> Html Msg
+viewPauseScreen model =
+    div
+        [ style "position" "absolute"
+        , style "left" (px <| model.viewport.viewport.width / 2)
+        , style "top" (px <| model.viewport.viewport.height / 2)
+        , style "transform" "translate(-50%, -50%)"
+        , style "border" "3px solid blue"
+        , style "background" "hsla(240, 100%, 50%, 0.45)"
+        , style "color" "white"
+        , style "width" "600px"
+        , style "height" "300px"
+        , style "text-align" "center"
+        , style "padding" "10px"
+        , style "font-size" "2rem"
+        ]
+        [ h1 [] [ text "Ark" ]
+        , p [] [ text "Press 'spacebar' to begin." ]
+        , p [] [ text "Use 'up' and 'down' arrows to navigate." ]
+        ]
+
+
+viewGamePlaying : Model -> Html Msg
+viewGamePlaying model =
+    div []
         [ injectStyle
         , viewBackground model
         , viewWater model
@@ -444,7 +495,6 @@ view model =
         , viewFish model
         , viewPoints model
         ]
-    }
 
 
 injectStyle : Html Msg
@@ -739,11 +789,15 @@ toDirection string =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.pause then
-        onKeyDown keyDecoder
+        Sub.batch
+            [ onKeyDown keyDecoder
+            , Browser.Events.onResize (\_ _ -> WindowResize)
+            ]
 
     else
         Sub.batch
             [ onAnimationFrameDelta (\delta -> Tick (delta / 1000)) -- convert to seconds
             , onKeyDown keyDecoder
             , Time.every 100 UpdateRain
+            , Browser.Events.onResize (\_ _ -> WindowResize)
             ]
