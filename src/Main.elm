@@ -9,6 +9,7 @@ import Html.Events exposing (..)
 import Json.Decode as Decode
 import Math.Vector2 as Vec2 exposing (..)
 import Random as Rand exposing (..)
+import String
 import Task
 import Time
 
@@ -27,7 +28,8 @@ main =
 
 
 type alias Model =
-    { waterLevel : Float
+    { points : Int
+    , waterLevel : Float
     , ark : Ark
     , fish : List Fish
     , birds : List Bird
@@ -69,7 +71,8 @@ type alias Flags =
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    ( { waterLevel = 0
+    ( { points = 0
+      , waterLevel = 0
       , ark = initArk ( 0, 0 )
       , fish = []
       , birds = []
@@ -370,31 +373,36 @@ realignArk model ark =
 checkCollisions : Model -> Model
 checkCollisions model =
     let
-        ( newArk, newFishList ) =
+        ( newArk, newFishList, fishPoints ) =
             List.foldl
-                (\fish ( ark, uneaten ) ->
+                (\fish ( ark, uneaten, points ) ->
                     if circlesCollide (realignArk model ark) (realignFish model fish) then
-                        ( ark, uneaten )
+                        ( ark, uneaten, points + 10 )
 
                     else
-                        ( ark, fish :: uneaten )
+                        ( ark, fish :: uneaten, points )
                 )
-                ( model.ark, [] )
+                ( model.ark, [], 0 )
                 model.fish
 
-        ( newArk2, newBirdList ) =
+        ( newArk2, newBirdList, birdPoints ) =
             List.foldl
-                (\bird ( ark, uneaten ) ->
+                (\bird ( ark, uneaten, points ) ->
                     if circlesCollide (realignArk model ark) (realignBird model bird) then
-                        ( ark, uneaten )
+                        ( ark, uneaten, points + 10 )
 
                     else
-                        ( ark, bird :: uneaten )
+                        ( ark, bird :: uneaten, points )
                 )
-                ( newArk, [] )
+                ( newArk, [], 0 )
                 model.birds
     in
-    { model | ark = newArk2, fish = newFishList, birds = newBirdList }
+    { model
+        | ark = newArk2
+        , fish = newFishList
+        , birds = newBirdList
+        , points = model.points + fishPoints + birdPoints
+    }
 
 
 type alias Positioned a =
@@ -434,6 +442,7 @@ view model =
         , viewRain model
         , viewBirds model
         , viewFish model
+        , viewPoints model
         ]
     }
 
@@ -508,6 +517,21 @@ viewRain model =
         , style "height" (px height)
         ]
         []
+
+
+viewPoints : Model -> Html Msg
+viewPoints model =
+    div
+        [ style "position" "fixed"
+        , style "top" "10px"
+        , style "right" "10px"
+        , style "background-color" "hsla(0, 0%, 100%, 0.61)"
+        , style "height" "50px"
+        , style "width" "100px"
+        , style "padding" "10px"
+        , style "font-size" "2rem"
+        ]
+        [ text <| String.fromInt model.points ]
 
 
 fishTop : Model -> Fish -> Float
