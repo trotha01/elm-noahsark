@@ -458,6 +458,7 @@ viewGamePaused model =
         , viewBirds model
         , viewFish model
         , viewPauseScreen model
+        , viewPoints model
         ]
 
 
@@ -504,7 +505,7 @@ injectStyle =
 
 light : Float -> Float
 light timeElapsed =
-    (sin <| abs (timeElapsed / 10)) * 100
+    (sin <| abs (timeElapsed / 10)) * 90
 
 
 viewBackground : Model -> Html Msg
